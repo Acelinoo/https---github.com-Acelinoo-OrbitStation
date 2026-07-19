@@ -1,0 +1,1017 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Advanced Live Satellite Tracker — Real-time 3D ISS orbital tracking with military-grade command center interface, reverse geocoding, and ultra-realistic Earth visualization." />
+  <title>OrbitStation — Advanced Live Satellite Tracker</title>
+
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;600;700;800;900&family=Share+Tech+Mono&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet" />
+
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            orbitron: ['Orbitron', 'sans-serif'],
+            mono: ['Share Tech Mono', 'monospace'],
+            inter: ['Inter', 'sans-serif'],
+          },
+        },
+      },
+    };
+  </script>
+
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      background: #000;
+      overflow: hidden;
+      font-family: 'Inter', sans-serif;
+      color: #d0d0d0;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* ─── Glass Panel ─── */
+    .glass-panel {
+      background: rgba(28, 31, 40, 0.88);
+      backdrop-filter: blur(28px);
+      -webkit-backdrop-filter: blur(28px);
+      border: 1px solid rgba(85, 95, 110, 0.22);
+      box-shadow:
+        0 8px 40px rgba(0, 0, 0, 0.5),
+        inset 0 1px 0 rgba(255, 255, 255, 0.04);
+    }
+
+    /* ─── Telemetry Cell ─── */
+    .telem-cell {
+      background: rgba(16, 19, 26, 0.7);
+      border: 1px solid rgba(60, 68, 80, 0.28);
+      border-radius: 8px;
+      padding: 10px 12px;
+      position: relative;
+      overflow: hidden;
+    }
+    .telem-cell::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 1px;
+      background: linear-gradient(90deg, transparent, rgba(0,255,136,0.15), transparent);
+    }
+
+    /* ─── Control Buttons ─── */
+    .ctrl-btn {
+      background: rgba(38, 42, 52, 0.85);
+      border: 1px solid rgba(80, 90, 105, 0.3);
+      color: #999;
+      padding: 9px 10px;
+      border-radius: 6px;
+      font-family: 'Orbitron', sans-serif;
+      font-size: 9px;
+      font-weight: 600;
+      letter-spacing: 0.8px;
+      cursor: pointer;
+      transition: all 0.25s ease;
+      text-transform: uppercase;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      user-select: none;
+    }
+    .ctrl-btn:hover {
+      background: rgba(50, 55, 68, 0.9);
+      border-color: rgba(110, 120, 135, 0.45);
+      color: #ccc;
+    }
+    .ctrl-btn.active {
+      background: rgba(0, 255, 136, 0.1);
+      border-color: rgba(0, 255, 136, 0.4);
+      color: #00ff88;
+      box-shadow: 0 0 18px rgba(0, 255, 136, 0.08);
+    }
+    .ctrl-btn .tag {
+      font-size: 7px;
+      padding: 1px 5px;
+      border-radius: 3px;
+      background: rgba(255,255,255,0.06);
+      color: #666;
+      letter-spacing: 0;
+    }
+    .ctrl-btn.active .tag {
+      background: rgba(0,255,136,0.18);
+      color: #00ff88;
+    }
+
+    /* ─── Animations ─── */
+    @keyframes dataFlash {
+      0% { color: #00ffaa; text-shadow: 0 0 10px rgba(0,255,170,0.5); }
+      100% { color: inherit; text-shadow: none; }
+    }
+    .data-flash { animation: dataFlash 0.4s ease-out; }
+
+    @keyframes pulseGlow {
+      0%, 100% { box-shadow: 0 0 4px currentColor; opacity: 1; }
+      50% { box-shadow: 0 0 12px currentColor; opacity: 0.7; }
+    }
+    .pulse-dot { animation: pulseGlow 1.8s ease-in-out infinite; }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(6px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .fade-in { animation: fadeIn 0.3s ease-out; }
+
+    @keyframes scanline {
+      0% { transform: translateY(-100%); }
+      100% { transform: translateY(100%); }
+    }
+
+    /* ─── Scanline Overlay ─── */
+    .scanlines::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: repeating-linear-gradient(
+        0deg,
+        transparent, transparent 2px,
+        rgba(0,0,0,0.025) 2px,
+        rgba(0,0,0,0.025) 4px
+      );
+      pointer-events: none;
+      border-radius: inherit;
+    }
+
+    /* ─── Vignette ─── */
+    #vignette {
+      position: fixed; inset: 0;
+      background: radial-gradient(ellipse at center, transparent 55%, rgba(0,0,0,0.55) 100%);
+      pointer-events: none;
+      z-index: 1;
+    }
+
+    /* ─── Scrollbar ─── */
+    ::-webkit-scrollbar { width: 3px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: rgba(80,90,100,0.35); border-radius: 3px; }
+
+    /* ─── Signal Bars ─── */
+    .sig-bar {
+      flex: 1;
+      border-radius: 2px 2px 0 0;
+      transition: height 0.15s ease-out;
+      min-width: 0;
+    }
+
+    /* ─── Loading ─── */
+    #loading-screen { transition: opacity 0.6s ease; }
+    @keyframes loadPulse {
+      0%, 100% { opacity: 0.4; }
+      50% { opacity: 1; }
+    }
+    .load-pulse { animation: loadPulse 1.5s ease-in-out infinite; }
+  </style>
+
+  <!-- Three.js Import Map -->
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://unpkg.com/three@0.162.0/build/three.module.js",
+      "three/addons/": "https://unpkg.com/three@0.162.0/examples/jsm/"
+    }
+  }
+  </script>
+</head>
+
+<body class="bg-black overflow-hidden font-inter">
+
+  <!-- ═══════════════ LOADING SCREEN ═══════════════ -->
+  <div id="loading-screen" class="fixed inset-0 bg-black flex items-center justify-center z-[100]">
+    <div class="text-center">
+      <h1 class="font-orbitron text-2xl font-black text-white tracking-widest mb-1">ORBIT STATION</h1>
+      <p class="text-[10px] font-mono text-gray-500 tracking-[3px] mb-8">ADVANCED SATELLITE TRACKER</p>
+      <div class="w-56 h-[3px] bg-gray-800/60 rounded-full overflow-hidden mx-auto">
+        <div id="load-bar" class="h-full bg-gradient-to-r from-emerald-500 to-emerald-300 rounded-full transition-all duration-300" style="width:0%"></div>
+      </div>
+      <p class="text-gray-600 text-[10px] mt-3 font-mono load-pulse tracking-wider">INITIALIZING SYSTEMS...</p>
+    </div>
+  </div>
+
+  <!-- ═══════════════ GLOBE CONTAINER ═══════════════ -->
+  <div id="globe-container" class="fixed inset-0"></div>
+  <div id="vignette"></div>
+
+  <!-- ═══════════════ HEADER PANEL (TOP-LEFT) ═══════════════ -->
+  <div class="fixed top-4 left-4 z-10 glass-panel rounded-xl p-4 pr-6 scanlines">
+    <div class="flex items-center gap-3 mb-1">
+      <div class="w-2 h-2 rounded-full bg-emerald-400 pulse-dot text-emerald-400"></div>
+      <span class="text-[10px] font-mono text-emerald-400 tracking-wider" id="status-text">CONNECTING...</span>
+    </div>
+    <h1 class="font-orbitron text-lg font-black text-white tracking-wider">ORBIT STATION</h1>
+    <p class="text-[9px] text-gray-500 font-mono tracking-[2px] mt-0.5">LIVE SATELLITE TRACKER v2.0</p>
+    <div class="mt-2.5 pt-2 border-t border-gray-700/40">
+      <span class="text-[10px] font-mono text-gray-400" id="utc-clock">--:--:-- UTC</span>
+    </div>
+  </div>
+
+  <!-- ═══════════════ RIGHT CONTROL PANEL ═══════════════ -->
+  <div id="control-panel" class="fixed top-4 right-4 bottom-4 w-[370px] z-10 glass-panel rounded-xl flex flex-col overflow-hidden scanlines">
+
+    <!-- Panel Header -->
+    <div class="p-4 pb-3 border-b border-gray-700/30">
+      <div class="flex items-center justify-between mb-1">
+        <span class="text-[9px] font-mono text-gray-500 tracking-wider">NORAD 25544</span>
+        <span class="text-[9px] font-mono text-gray-600">ISS (ZARYA)</span>
+      </div>
+      <h2 class="font-orbitron text-sm font-bold text-white tracking-wider">TELEMETRY DATA</h2>
+    </div>
+
+    <!-- Telemetry Grid -->
+    <div class="grid grid-cols-2 gap-2.5 p-4 pb-3">
+      <div class="telem-cell">
+        <div class="text-[8px] font-mono text-gray-500 tracking-wider mb-1">LATITUDE</div>
+        <div class="text-base font-mono text-white font-medium" id="val-lat">——.————°</div>
+      </div>
+      <div class="telem-cell">
+        <div class="text-[8px] font-mono text-gray-500 tracking-wider mb-1">LONGITUDE</div>
+        <div class="text-base font-mono text-white font-medium" id="val-lng">——.————°</div>
+      </div>
+      <div class="telem-cell">
+        <div class="text-[8px] font-mono text-gray-500 tracking-wider mb-1">ALTITUDE</div>
+        <div class="flex items-baseline gap-1">
+          <span class="text-base font-mono text-white font-medium" id="val-alt">———.—</span>
+          <span class="text-[9px] text-gray-500 font-mono">KM</span>
+        </div>
+      </div>
+      <div class="telem-cell">
+        <div class="text-[8px] font-mono text-gray-500 tracking-wider mb-1">VELOCITY</div>
+        <div class="flex items-baseline gap-1">
+          <span class="text-base font-mono text-white font-medium" id="val-vel">————.—</span>
+          <span class="text-[9px] text-gray-500 font-mono">KM/H</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Location Data -->
+    <div class="px-4 pb-3">
+      <div class="telem-cell !p-3">
+        <div class="flex items-center justify-between mb-2">
+          <span class="text-[8px] font-orbitron font-bold text-gray-400 tracking-wider">LOCATION DATA</span>
+          <span class="text-[8px] font-mono text-gray-600" id="loc-update">WAITING...</span>
+        </div>
+        <div id="location-content" class="min-h-[60px]">
+          <div class="text-xs font-mono text-gray-600">Acquiring signal...</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Visibility -->
+    <div class="px-4 pb-3">
+      <div class="telem-cell !p-3">
+        <div class="text-[8px] font-orbitron font-bold text-gray-400 tracking-wider mb-2">ORBITAL INFO</div>
+        <div class="grid grid-cols-2 gap-x-4 gap-y-1.5">
+          <div class="flex justify-between">
+            <span class="text-[9px] font-mono text-gray-500">VISIBILITY</span>
+            <span class="text-[9px] font-mono text-gray-300" id="val-vis">—</span>
+          </div>
+          <div class="flex justify-between">
+            <span class="text-[9px] font-mono text-gray-500">FOOTPRINT</span>
+            <span class="text-[9px] font-mono text-gray-300" id="val-foot">—</span>
+          </div>
+          <div class="flex justify-between">
+            <span class="text-[9px] font-mono text-gray-500">SOLAR LAT</span>
+            <span class="text-[9px] font-mono text-gray-300" id="val-solarlat">—</span>
+          </div>
+          <div class="flex justify-between">
+            <span class="text-[9px] font-mono text-gray-500">SOLAR LON</span>
+            <span class="text-[9px] font-mono text-gray-300" id="val-solarlon">—</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Signal Strength -->
+    <div class="px-4 pb-3">
+      <div class="text-[8px] font-orbitron font-bold text-gray-400 tracking-wider mb-2 px-1">SIGNAL STRENGTH</div>
+      <div id="signal-bars" class="flex items-end gap-[2px] h-14 px-1"></div>
+    </div>
+
+    <!-- Spacer -->
+    <div class="flex-1"></div>
+
+    <!-- Control Buttons -->
+    <div class="p-4 pt-3 border-t border-gray-700/30 grid grid-cols-2 gap-2">
+      <button id="btn-orbit" class="ctrl-btn" onclick="toggleOrbit()">
+        ORBITAL PATH <span class="tag">OFF</span>
+      </button>
+      <button id="btn-ground" class="ctrl-btn" onclick="toggleGround()">
+        GROUND TRACK <span class="tag">OFF</span>
+      </button>
+      <button id="btn-rotate" class="ctrl-btn active" onclick="toggleAutoRotate()">
+        AUTO-ROTATE <span class="tag">ON</span>
+      </button>
+      <button id="btn-fullscreen" class="ctrl-btn" onclick="toggleFullscreen()">
+        ⛶ FULLSCREEN
+      </button>
+    </div>
+  </div>
+
+  <!-- ═══════════════ BOTTOM STATUS BAR ═══════════════ -->
+  <div class="fixed bottom-4 left-4 z-10 glass-panel rounded-lg px-4 py-2.5 flex items-center gap-3">
+    <span class="text-[9px] font-mono text-gray-500">NORAD ID: 25544</span>
+    <span class="text-gray-700">│</span>
+    <span class="text-[9px] font-mono text-gray-500">INCLINATION: 51.64°</span>
+    <span class="text-gray-700">│</span>
+    <span class="text-[9px] font-mono text-gray-500">PERIOD: ~92 MIN</span>
+    <span class="text-gray-700">│</span>
+    <div class="flex items-center gap-1.5">
+      <div class="w-1.5 h-1.5 rounded-full bg-emerald-400 pulse-dot text-emerald-400"></div>
+      <span class="text-[9px] font-mono text-emerald-400" id="conn-status">CONNECTED</span>
+    </div>
+  </div>
+
+  <!-- ═══════════════ MAIN SCRIPT ═══════════════ -->
+  <script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+    // ────────────────────────────────────────
+    //  CONSTANTS & STATE
+    // ────────────────────────────────────────
+    const EARTH_RADIUS = 100;
+    const ALT_SCALE = 2.8;
+    const ISS_INCLINATION = 51.64;
+    const ISS_API = 'https://api.wheretheiss.at/v1/satellites/25544';
+    const GEO_API = 'https://api.bigdatacloud.net/data/reverse-geocode-client';
+
+    let orbitVisible = false;
+    let groundVisible = false;
+    let autoRotate = true;
+    let groundTrackPoints = [];
+    const MAX_GROUND_POINTS = 350;
+
+    // ────────────────────────────────────────
+    //  THREE.JS SETUP
+    // ────────────────────────────────────────
+    const loadingManager = new THREE.LoadingManager();
+    const loadBar = document.getElementById('load-bar');
+    let loadCount = 0;
+    const totalLoads = 3; // earth, bump, clouds
+
+    loadingManager.onProgress = () => {
+      loadCount++;
+      loadBar.style.width = Math.min(100, (loadCount / totalLoads) * 90) + '%';
+    };
+    loadingManager.onLoad = () => {
+      loadBar.style.width = '100%';
+      setTimeout(() => {
+        const ls = document.getElementById('loading-screen');
+        ls.style.opacity = '0';
+        setTimeout(() => ls.style.display = 'none', 600);
+      }, 400);
+    };
+
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 3000);
+    camera.position.set(60, 120, 250);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.1;
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    document.getElementById('globe-container').appendChild(renderer.domElement);
+
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.06;
+    controls.minDistance = 130;
+    controls.maxDistance = 600;
+    controls.autoRotate = true;
+    controls.autoRotateSpeed = 0.25;
+    controls.enablePan = false;
+
+    // ────────────────────────────────────────
+    //  LIGHTING
+    // ────────────────────────────────────────
+    const ambientLight = new THREE.AmbientLight(0x336699, 0.35);
+    scene.add(ambientLight);
+
+    const sunLight = new THREE.DirectionalLight(0xfff8f0, 2.0);
+    sunLight.position.set(250, 120, 200);
+    scene.add(sunLight);
+
+    const rimLight = new THREE.DirectionalLight(0x4488cc, 0.4);
+    rimLight.position.set(-200, -50, -150);
+    scene.add(rimLight);
+
+    const hemiLight = new THREE.HemisphereLight(0x6688cc, 0x222233, 0.3);
+    scene.add(hemiLight);
+
+    // ────────────────────────────────────────
+    //  TEXTURE LOADER
+    // ────────────────────────────────────────
+    const texLoader = new THREE.TextureLoader(loadingManager);
+
+    // ────────────────────────────────────────
+    //  EARTH
+    // ────────────────────────────────────────
+    const earthGeo = new THREE.SphereGeometry(EARTH_RADIUS, 128, 128);
+    const earthMat = new THREE.MeshPhongMaterial({
+      map: texLoader.load('https://unpkg.com/three-globe/example/img/earth-blue-marble.jpg'),
+      bumpMap: texLoader.load('https://unpkg.com/three-globe/example/img/earth-topology.png'),
+      bumpScale: 0.6,
+      specular: new THREE.Color(0x333333),
+      shininess: 18,
+    });
+    const earthMesh = new THREE.Mesh(earthGeo, earthMat);
+    scene.add(earthMesh);
+
+    // ────────────────────────────────────────
+    //  CLOUDS
+    // ────────────────────────────────────────
+    const cloudGeo = new THREE.SphereGeometry(EARTH_RADIUS * 1.008, 96, 96);
+    const cloudMat = new THREE.MeshPhongMaterial({
+      map: texLoader.load('https://unpkg.com/three-globe/example/img/earth-clouds.png'),
+      transparent: true,
+      opacity: 0.28,
+      depthWrite: false,
+      side: THREE.DoubleSide,
+    });
+    const cloudMesh = new THREE.Mesh(cloudGeo, cloudMat);
+    scene.add(cloudMesh);
+
+    // ────────────────────────────────────────
+    //  ATMOSPHERE (Fresnel Glow)
+    // ────────────────────────────────────────
+    const atmosVert = `
+      varying vec3 vNormal;
+      void main() {
+        vNormal = normalize(normalMatrix * normal);
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }
+    `;
+    const atmosFrag = `
+      varying vec3 vNormal;
+      void main() {
+        float intensity = pow(max(0.0, 0.68 - dot(vNormal, vec3(0.0, 0.0, 1.0))), 2.0);
+        gl_FragColor = vec4(0.32, 0.62, 1.0, 1.0) * intensity * 1.4;
+      }
+    `;
+    const atmosMesh = new THREE.Mesh(
+      new THREE.SphereGeometry(EARTH_RADIUS * 1.18, 64, 64),
+      new THREE.ShaderMaterial({
+        vertexShader: atmosVert,
+        fragmentShader: atmosFrag,
+        blending: THREE.AdditiveBlending,
+        side: THREE.BackSide,
+        transparent: true,
+        depthWrite: false,
+      })
+    );
+    scene.add(atmosMesh);
+
+    // ────────────────────────────────────────
+    //  STARFIELD
+    // ────────────────────────────────────────
+    function createStarfield() {
+      const count = 8000;
+      const positions = new Float32Array(count * 3);
+      const sizes = new Float32Array(count);
+      for (let i = 0; i < count; i++) {
+        const r = 800 + Math.random() * 1200;
+        const theta = Math.random() * Math.PI * 2;
+        const phi = Math.acos(2 * Math.random() - 1);
+        positions[i * 3] = r * Math.sin(phi) * Math.cos(theta);
+        positions[i * 3 + 1] = r * Math.sin(phi) * Math.sin(theta);
+        positions[i * 3 + 2] = r * Math.cos(phi);
+        sizes[i] = 0.3 + Math.random() * 1.2;
+      }
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+      geo.setAttribute('size', new THREE.BufferAttribute(sizes, 1));
+
+      const mat = new THREE.PointsMaterial({
+        color: 0xffffff,
+        size: 0.7,
+        sizeAttenuation: true,
+        transparent: true,
+        opacity: 0.85,
+      });
+      return new THREE.Points(geo, mat);
+    }
+    scene.add(createStarfield());
+
+    // ────────────────────────────────────────
+    //  SATELLITE MODEL (ISS)
+    // ────────────────────────────────────────
+    function createSatelliteModel() {
+      const group = new THREE.Group();
+
+      // Central body (pressurized modules)
+      const bodyMat = new THREE.MeshPhongMaterial({
+        color: 0xb0b0b0,
+        specular: 0xffffff,
+        shininess: 80,
+        emissive: 0x111111,
+      });
+      const bodyGeo = new THREE.BoxGeometry(2.4, 1.4, 1.8);
+      const body = new THREE.Mesh(bodyGeo, bodyMat);
+      group.add(body);
+
+      // Main truss
+      const trussMat = new THREE.MeshPhongMaterial({
+        color: 0x888888,
+        specular: 0x999999,
+        shininess: 60,
+      });
+      const trussGeo = new THREE.BoxGeometry(18, 0.25, 0.25);
+      const truss = new THREE.Mesh(trussGeo, trussMat);
+      group.add(truss);
+
+      // Cross truss
+      const crossGeo = new THREE.BoxGeometry(0.2, 0.2, 3);
+      const cross = new THREE.Mesh(crossGeo, trussMat);
+      group.add(cross);
+
+      // Solar panels
+      const panelMat = new THREE.MeshPhongMaterial({
+        color: 0x0d1b3e,
+        specular: 0x2244aa,
+        shininess: 100,
+        emissive: 0x050a18,
+        side: THREE.DoubleSide,
+      });
+
+      const panelGeo = new THREE.BoxGeometry(4.2, 0.06, 2.8);
+
+      // Four solar panel arrays (like real ISS)
+      const panelPositions = [-7, -3.5, 3.5, 7];
+      panelPositions.forEach(xPos => {
+        const panel = new THREE.Mesh(panelGeo, panelMat);
+        panel.position.set(xPos, 0, 0);
+        group.add(panel);
+
+        // Panel grid lines
+        const gridMat = new THREE.LineBasicMaterial({ color: 0x1a3366, transparent: true, opacity: 0.5 });
+        for (let g = -1; g <= 1; g += 0.5) {
+          const lineGeo = new THREE.BufferGeometry().setFromPoints([
+            new THREE.Vector3(xPos - 2, 0.04, g),
+            new THREE.Vector3(xPos + 2, 0.04, g),
+          ]);
+          group.add(new THREE.Line(lineGeo, gridMat));
+        }
+      });
+
+      // Small antenna
+      const antGeo = new THREE.CylinderGeometry(0.03, 0.03, 2, 8);
+      const antMat = new THREE.MeshPhongMaterial({ color: 0xcccccc });
+      const antenna = new THREE.Mesh(antGeo, antMat);
+      antenna.position.set(0, 1.5, 0);
+      group.add(antenna);
+
+      // Radiators (grey flat panels)
+      const radMat = new THREE.MeshPhongMaterial({ color: 0xdddddd, side: THREE.DoubleSide });
+      const radGeo = new THREE.BoxGeometry(1.5, 0.04, 1.2);
+      [-2.5, 2.5].forEach(xPos => {
+        const rad = new THREE.Mesh(radGeo, radMat);
+        rad.position.set(xPos, 0.4, 0);
+        rad.rotation.z = 0.3;
+        group.add(rad);
+      });
+
+      // Glow sprite
+      const glowCanvas = document.createElement('canvas');
+      glowCanvas.width = 128;
+      glowCanvas.height = 128;
+      const gCtx = glowCanvas.getContext('2d');
+      const gGrad = gCtx.createRadialGradient(64, 64, 0, 64, 64, 64);
+      gGrad.addColorStop(0, 'rgba(0,255,136,0.5)');
+      gGrad.addColorStop(0.35, 'rgba(0,255,136,0.15)');
+      gGrad.addColorStop(1, 'rgba(0,255,136,0)');
+      gCtx.fillStyle = gGrad;
+      gCtx.fillRect(0, 0, 128, 128);
+      const glowTex = new THREE.CanvasTexture(glowCanvas);
+      const glowSprite = new THREE.Sprite(
+        new THREE.SpriteMaterial({
+          map: glowTex,
+          blending: THREE.AdditiveBlending,
+          transparent: true,
+          depthWrite: false,
+        })
+      );
+      glowSprite.scale.setScalar(10);
+      group.add(glowSprite);
+
+      // Point light on satellite
+      const satLight = new THREE.PointLight(0x00ff88, 0.6, 40);
+      group.add(satLight);
+
+      group.scale.setScalar(0.65);
+      return group;
+    }
+
+    const satellite = createSatelliteModel();
+    scene.add(satellite);
+
+    // ────────────────────────────────────────
+    //  ORBITAL RING
+    // ────────────────────────────────────────
+    function createOrbitalRing(orbitRadius) {
+      const pts = [];
+      const seg = 512;
+      const incl = ISS_INCLINATION * Math.PI / 180;
+      for (let i = 0; i <= seg; i++) {
+        const a = (i / seg) * Math.PI * 2;
+        pts.push(new THREE.Vector3(
+          orbitRadius * Math.cos(a),
+          orbitRadius * Math.sin(a) * Math.sin(incl),
+          orbitRadius * Math.sin(a) * Math.cos(incl)
+        ));
+      }
+      const geo = new THREE.BufferGeometry().setFromPoints(pts);
+      const mat = new THREE.LineDashedMaterial({
+        color: 0x00ff88,
+        dashSize: 3,
+        gapSize: 2,
+        transparent: true,
+        opacity: 0.35,
+      });
+      const line = new THREE.Line(geo, mat);
+      line.computeLineDistances();
+      line.visible = false;
+      return line;
+    }
+
+    const defaultOrbitAlt = (420 / 6371) * EARTH_RADIUS * ALT_SCALE;
+    const orbitalRing = createOrbitalRing(EARTH_RADIUS + defaultOrbitAlt);
+    scene.add(orbitalRing);
+
+    // ────────────────────────────────────────
+    //  GROUND TRACK
+    // ────────────────────────────────────────
+    const groundTrackGeo = new THREE.BufferGeometry();
+    const groundTrackMat = new THREE.LineBasicMaterial({
+      color: 0xff7700,
+      transparent: true,
+      opacity: 0.55,
+    });
+    const groundTrackLine = new THREE.Line(groundTrackGeo, groundTrackMat);
+    groundTrackLine.frustumCulled = false;
+    groundTrackLine.visible = false;
+    scene.add(groundTrackLine);
+
+    // ────────────────────────────────────────
+    //  HELPER: LAT/LNG → VECTOR3
+    // ────────────────────────────────────────
+    function latLngToVec3(lat, lng, radius) {
+      const phi = (90 - lat) * Math.PI / 180;
+      const theta = (lng + 180) * Math.PI / 180;
+      return new THREE.Vector3(
+        -(radius * Math.sin(phi) * Math.cos(theta)),
+        radius * Math.cos(phi),
+        radius * Math.sin(phi) * Math.sin(theta)
+      );
+    }
+
+    // ────────────────────────────────────────
+    //  HELPER: OCEAN DETECTION
+    // ────────────────────────────────────────
+    function getOceanName(lat, lng) {
+      while (lng > 180) lng -= 360;
+      while (lng < -180) lng += 360;
+
+      if (lat < -60) return 'SOUTHERN OCEAN';
+      if (lat > 65) return 'ARCTIC OCEAN';
+
+      // Seas
+      if (lat > 30 && lat < 46 && lng > -6 && lng < 37) return 'MEDITERRANEAN SEA';
+      if (lat > 9 && lat < 23 && lng > -88 && lng < -59) return 'CARIBBEAN SEA';
+      if (lat > 18 && lat < 31 && lng > -98 && lng < -80) return 'GULF OF MEXICO';
+      if (lat > 12 && lat < 30 && lng > 32 && lng < 44) return 'RED SEA';
+      if (lat > 10 && lat < 30 && lng > 44 && lng < 77) return 'ARABIAN SEA';
+      if (lat > 5 && lat < 23 && lng > 77 && lng < 95) return 'BAY OF BENGAL';
+      if (lat > -2 && lat < 23 && lng > 99 && lng < 122) return 'SOUTH CHINA SEA';
+      if (lat > -9 && lat < 0 && lng > 105 && lng < 120) return 'JAVA SEA';
+      if (lat > -8 && lat < 8 && lng > 120 && lng < 140) return 'BANDA SEA';
+      if (lat > -30 && lat < -8 && lng > 145 && lng < 170) return 'CORAL SEA';
+      if (lat > -47 && lat < -30 && lng > 150 && lng < 178) return 'TASMAN SEA';
+      if (lat > 33 && lat < 53 && lng > 127 && lng < 142) return 'SEA OF JAPAN';
+      if (lat > 52 && lat < 66 && (lng > 162 || lng < -157)) return 'BERING SEA';
+      if (lat > 54 && lat < 62 && lng > -5 && lng < 10) return 'NORTH SEA';
+      if (lat > 53 && lat < 66 && lng > 10 && lng < 30) return 'BALTIC SEA';
+      if (lat > 35 && lat < 46 && lng > 26 && lng < 42) return 'BLACK SEA';
+      if (lat > 25 && lat < 48 && lng > 120 && lng < 132) return 'EAST CHINA SEA';
+      if (lat > 43 && lat < 62 && lng > 132 && lng < 165) return 'SEA OF OKHOTSK';
+
+      // Major oceans
+      if (lat < 30 && lng >= 20 && lng <= 120) return 'INDIAN OCEAN';
+
+      if (lng > 120 || lng < -68) {
+        return lat > 0 ? 'NORTH PACIFIC OCEAN' : 'SOUTH PACIFIC OCEAN';
+      }
+
+      if (lng >= -68 && lng <= 20) {
+        return lat > 0 ? 'NORTH ATLANTIC OCEAN' : 'SOUTH ATLANTIC OCEAN';
+      }
+
+      return 'OCEAN';
+    }
+
+    // ────────────────────────────────────────
+    //  ORBITAL RING ALIGNMENT
+    // ────────────────────────────────────────
+    function alignOrbitalRing(lat, lng) {
+      const incl = ISS_INCLINATION * Math.PI / 180;
+      const latRad = lat * Math.PI / 180;
+      const lngRad = lng * Math.PI / 180;
+      const sinU = Math.sin(latRad) / Math.sin(incl);
+      const u = Math.asin(Math.max(-1, Math.min(1, sinU)));
+      const raan = lngRad - Math.atan2(Math.cos(incl) * Math.sin(u), Math.cos(u));
+      orbitalRing.rotation.y = raan;
+    }
+
+    // ────────────────────────────────────────
+    //  UPDATE SATELLITE POSITION
+    // ────────────────────────────────────────
+    function updateSatellitePosition(lat, lng, alt) {
+      const altUnit = (alt / 6371) * EARTH_RADIUS * ALT_SCALE;
+      const pos = latLngToVec3(lat, lng, EARTH_RADIUS + altUnit);
+      satellite.position.copy(pos);
+      satellite.lookAt(0, 0, 0);
+      satellite.rotateX(Math.PI / 2);
+
+      // Ground track
+      const groundPos = latLngToVec3(lat, lng, EARTH_RADIUS * 1.002);
+      groundTrackPoints.push(groundPos);
+      if (groundTrackPoints.length > MAX_GROUND_POINTS) groundTrackPoints.shift();
+
+      if (groundTrackPoints.length > 1) {
+        groundTrackLine.geometry.dispose();
+        groundTrackLine.geometry = new THREE.BufferGeometry().setFromPoints(groundTrackPoints);
+      }
+
+      // Orbital ring alignment
+      if (orbitalRing.visible) alignOrbitalRing(lat, lng);
+    }
+
+    // ────────────────────────────────────────
+    //  UI UPDATE FUNCTIONS
+    // ────────────────────────────────────────
+    function flashEl(el) {
+      el.classList.remove('data-flash');
+      void el.offsetWidth;
+      el.classList.add('data-flash');
+    }
+
+    function updateTelemetryUI(data) {
+      const latEl = document.getElementById('val-lat');
+      const lngEl = document.getElementById('val-lng');
+      const altEl = document.getElementById('val-alt');
+      const velEl = document.getElementById('val-vel');
+
+      latEl.textContent = data.latitude.toFixed(4) + '°';
+      lngEl.textContent = data.longitude.toFixed(4) + '°';
+      altEl.textContent = data.altitude.toFixed(1);
+      velEl.textContent = data.velocity.toFixed(1);
+
+      [latEl, lngEl, altEl, velEl].forEach(flashEl);
+
+      // Extra orbital info
+      const vis = document.getElementById('val-vis');
+      const foot = document.getElementById('val-foot');
+      const sLat = document.getElementById('val-solarlat');
+      const sLon = document.getElementById('val-solarlon');
+
+      vis.textContent = data.visibility || '—';
+      foot.textContent = data.footprint ? data.footprint.toFixed(0) + ' km' : '—';
+      sLat.textContent = data.solar_lat ? data.solar_lat.toFixed(2) + '°' : '—';
+      sLon.textContent = data.solar_lon ? data.solar_lon.toFixed(2) + '°' : '—';
+    }
+
+    function updateLocationUI(info) {
+      const panel = document.getElementById('location-content');
+      const ts = document.getElementById('loc-update');
+      const now = new Date();
+      ts.textContent = now.toTimeString().slice(0, 8);
+
+      if (info.error) {
+        panel.innerHTML = `<div class="text-red-400/70 text-[10px] font-mono fade-in">⚠ GEOCODING UNAVAILABLE</div>`;
+        return;
+      }
+
+      if (info.overWater) {
+        panel.innerHTML = `
+          <div class="fade-in">
+            <div class="flex items-center gap-2 mb-2">
+              <div class="w-1.5 h-1.5 rounded-full bg-blue-400"></div>
+              <span class="text-[10px] font-mono text-blue-400 tracking-wider">STATUS: OVER OCEAN</span>
+            </div>
+            <div class="font-orbitron text-[15px] font-bold text-blue-300 tracking-wide leading-snug">${info.oceanName}</div>
+          </div>`;
+      } else {
+        let rows = '';
+        if (info.country) rows += `
+          <div class="flex items-center gap-2.5">
+            <span class="text-[9px] font-mono text-gray-500 w-[60px] shrink-0">COUNTRY</span>
+            <span class="text-[12px] font-medium text-white">${info.country}</span>
+          </div>`;
+        if (info.state) rows += `
+          <div class="flex items-center gap-2.5">
+            <span class="text-[9px] font-mono text-gray-500 w-[60px] shrink-0">STATE</span>
+            <span class="text-[12px] text-gray-300">${info.state}</span>
+          </div>`;
+        if (info.city) rows += `
+          <div class="flex items-center gap-2.5">
+            <span class="text-[9px] font-mono text-gray-500 w-[60px] shrink-0">CITY</span>
+            <span class="text-[12px] text-gray-300">${info.city}</span>
+          </div>`;
+
+        panel.innerHTML = `
+          <div class="fade-in">
+            <div class="flex items-center gap-2 mb-2">
+              <div class="w-1.5 h-1.5 rounded-full bg-emerald-400"></div>
+              <span class="text-[10px] font-mono text-emerald-400 tracking-wider">STATUS: OVER LAND</span>
+            </div>
+            <div class="space-y-1.5">${rows}</div>
+          </div>`;
+      }
+    }
+
+    // ────────────────────────────────────────
+    //  API FETCHING
+    // ────────────────────────────────────────
+    async function fetchAndUpdate() {
+      try {
+        const res = await fetch(ISS_API);
+        if (!res.ok) throw new Error('ISS API error');
+        const data = await res.json();
+
+        updateSatellitePosition(data.latitude, data.longitude, data.altitude);
+        updateTelemetryUI(data);
+
+        document.getElementById('status-text').textContent = 'TRACKING ACTIVE';
+        document.getElementById('status-text').className = 'text-[10px] font-mono text-emerald-400 tracking-wider';
+        document.getElementById('conn-status').textContent = 'CONNECTED';
+
+        // Reverse geocode
+        try {
+          const geoRes = await fetch(
+            `${GEO_API}?latitude=${data.latitude}&longitude=${data.longitude}&localityLanguage=en`
+          );
+          const geo = await geoRes.json();
+
+          if (!geo.countryName || geo.countryName.trim() === '') {
+            updateLocationUI({
+              overWater: true,
+              oceanName: getOceanName(data.latitude, data.longitude),
+            });
+          } else {
+            updateLocationUI({
+              overWater: false,
+              country: geo.countryName || '',
+              state: geo.principalSubdivision || '',
+              city: geo.city || geo.locality || '',
+            });
+          }
+        } catch {
+          updateLocationUI({ error: true });
+        }
+      } catch {
+        document.getElementById('status-text').textContent = 'SIGNAL LOST';
+        document.getElementById('status-text').className = 'text-[10px] font-mono text-red-400 tracking-wider';
+        document.getElementById('conn-status').textContent = 'DISCONNECTED';
+      }
+    }
+
+    // ────────────────────────────────────────
+    //  SIGNAL STRENGTH EQUALIZER
+    // ────────────────────────────────────────
+    function initEqualizer() {
+      const container = document.getElementById('signal-bars');
+      for (let i = 0; i < 40; i++) {
+        const bar = document.createElement('div');
+        bar.className = 'sig-bar';
+        const baseHue = 0; // grey
+        const lightness = 35 + Math.random() * 15;
+        bar.style.background = `linear-gradient(to top, hsl(160,5%,${lightness}%), hsl(160,8%,${lightness + 15}%))`;
+        bar.style.height = '8%';
+        container.appendChild(bar);
+      }
+
+      setInterval(() => {
+        const bars = container.children;
+        for (let i = 0; i < bars.length; i++) {
+          const h = 8 + Math.random() * 82;
+          bars[i].style.height = h + '%';
+          const bright = 30 + (h / 100) * 25;
+          bars[i].style.background = `linear-gradient(to top, hsl(160,5%,${bright}%), hsl(160,12%,${bright + 15}%))`;
+        }
+      }, 120);
+    }
+
+    // ────────────────────────────────────────
+    //  UTC CLOCK
+    // ────────────────────────────────────────
+    function updateClock() {
+      const now = new Date();
+      const h = String(now.getUTCHours()).padStart(2, '0');
+      const m = String(now.getUTCMinutes()).padStart(2, '0');
+      const s = String(now.getUTCSeconds()).padStart(2, '0');
+      document.getElementById('utc-clock').textContent = `${h}:${m}:${s} UTC`;
+    }
+
+    // ────────────────────────────────────────
+    //  BUTTON HANDLERS (global scope)
+    // ────────────────────────────────────────
+    window.toggleOrbit = function () {
+      orbitVisible = !orbitVisible;
+      orbitalRing.visible = orbitVisible;
+      const btn = document.getElementById('btn-orbit');
+      btn.classList.toggle('active', orbitVisible);
+      btn.querySelector('.tag').textContent = orbitVisible ? 'ON' : 'OFF';
+    };
+
+    window.toggleGround = function () {
+      groundVisible = !groundVisible;
+      groundTrackLine.visible = groundVisible;
+      const btn = document.getElementById('btn-ground');
+      btn.classList.toggle('active', groundVisible);
+      btn.querySelector('.tag').textContent = groundVisible ? 'ON' : 'OFF';
+    };
+
+    window.toggleAutoRotate = function () {
+      autoRotate = !autoRotate;
+      controls.autoRotate = autoRotate;
+      const btn = document.getElementById('btn-rotate');
+      btn.classList.toggle('active', autoRotate);
+      btn.querySelector('.tag').textContent = autoRotate ? 'ON' : 'OFF';
+    };
+
+    window.toggleFullscreen = function () {
+      if (!document.fullscreenElement) {
+        document.documentElement.requestFullscreen().catch(() => {});
+      } else {
+        document.exitFullscreen();
+      }
+    };
+
+    // ────────────────────────────────────────
+    //  ANIMATION LOOP
+    // ────────────────────────────────────────
+    const clock = new THREE.Clock();
+
+    function animate() {
+      requestAnimationFrame(animate);
+
+      const delta = clock.getDelta();
+      const elapsed = clock.getElapsedTime();
+
+      // Independent cloud rotation
+      cloudMesh.rotation.y += delta * 0.008;
+
+      // Subtle satellite float animation
+      if (satellite.position.length() > 0) {
+        satellite.children.forEach((child, i) => {
+          if (child.type === 'Sprite') {
+            child.scale.setScalar(9 + Math.sin(elapsed * 3) * 1.5);
+          }
+        });
+      }
+
+      controls.update();
+      renderer.render(scene, camera);
+    }
+
+    // ────────────────────────────────────────
+    //  WINDOW RESIZE
+    // ────────────────────────────────────────
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+
+    // ────────────────────────────────────────
+    //  INITIALIZATION
+    // ────────────────────────────────────────
+    animate();
+    initEqualizer();
+    updateClock();
+    setInterval(updateClock, 1000);
+
+    // Start tracking
+    fetchAndUpdate();
+    setInterval(fetchAndUpdate, 2000);
+
+  </script>
+</body>
+</html>
